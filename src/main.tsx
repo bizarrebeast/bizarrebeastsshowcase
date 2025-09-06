@@ -1,14 +1,14 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
-import SpriteSequenceApp from './SpriteSequenceApp'
+import MovementApp from './MovementApp'
 
 const root = document.getElementById('root');
 
 if (root) {
   createRoot(root).render(
     <StrictMode>
-      <SpriteSequenceApp />
+      <MovementApp />
     </StrictMode>,
   )
 }

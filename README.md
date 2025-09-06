@@ -1,58 +1,69 @@
-# BUTQ Character Showcase Tool
+# React + TypeScript + Vite
 
-Transform high-resolution character artwork into polished 2000x2000 animated showcases with effects and backgrounds.
+This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
-## Features
+Currently, two official plugins are available:
 
-- 🎨 **High-Res Support**: Process 14"x14" 300dpi hand-drawn artwork
-- 🎬 **BUTQ Animations**: Port character animations directly from the game
-- ✨ **Visual Effects**: Glow, particles, auras, and more
-- 🎯 **Preset System**: Pre-configured settings for different character types
-- 📤 **Multi-Format Export**: PNG, GIF, MP4, WebM
-- 💾 **Save/Load**: Store and reuse your configurations
+- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
+- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
 
-## Quick Start
+## Expanding the ESLint configuration
 
-```bash
-# Install dependencies
-npm install
+If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
 
-# Start development server
-npm run dev
+```js
+export default tseslint.config([
+  globalIgnores(['dist']),
+  {
+    files: ['**/*.{ts,tsx}'],
+    extends: [
+      // Other configs...
 
-# Build for production
-npm run build
+      // Remove tseslint.configs.recommended and replace with this
+      ...tseslint.configs.recommendedTypeChecked,
+      // Alternatively, use this for stricter rules
+      ...tseslint.configs.strictTypeChecked,
+      // Optionally, add this for stylistic rules
+      ...tseslint.configs.stylisticTypeChecked,
+
+      // Other configs...
+    ],
+    languageOptions: {
+      parserOptions: {
+        project: ['./tsconfig.node.json', './tsconfig.app.json'],
+        tsconfigRootDir: import.meta.dirname,
+      },
+      // other options...
+    },
+  },
+])
 ```
 
-## Project Status
+You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
 
-🚧 **In Development** - See [GAMEPLAN.md](./GAMEPLAN.md) for detailed roadmap
+```js
+// eslint.config.js
+import reactX from 'eslint-plugin-react-x'
+import reactDom from 'eslint-plugin-react-dom'
 
-### Current Phase
-- [x] Project initialization
-- [ ] Core canvas system
-- [ ] Animation engine
-- [ ] Preset system
-- [ ] Export functionality
-
-## Tech Stack
-
-- React 18 + TypeScript
-- Konva.js for canvas manipulation
-- GSAP for animations
-- Vite for building
-- Tailwind CSS for styling
-
-## Documentation
-
-- [Game Plan](./GAMEPLAN.md) - Comprehensive development roadmap
-- [Animation Guide](./docs/animations.md) - Animation system documentation (coming soon)
-- [Preset Reference](./docs/presets.md) - Preset configuration guide (coming soon)
-
-## License
-
-Private project for Bizarre Underground Treasure Quest
-
-## Author
-
-Dylan - BUTQ Developer
+export default tseslint.config([
+  globalIgnores(['dist']),
+  {
+    files: ['**/*.{ts,tsx}'],
+    extends: [
+      // Other configs...
+      // Enable lint rules for React
+      reactX.configs['recommended-typescript'],
+      // Enable lint rules for React DOM
+      reactDom.configs.recommended,
+    ],
+    languageOptions: {
+      parserOptions: {
+        project: ['./tsconfig.node.json', './tsconfig.app.json'],
+        tsconfigRootDir: import.meta.dirname,
+      },
+      // other options...
+    },
+  },
+])
+```

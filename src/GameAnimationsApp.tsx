@@ -171,6 +171,35 @@ function GameAnimationsApp() {
   // Export settings
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportSize, setExportSize] = useState('2000');
+  const [exportType, setExportType] = useState<'image' | 'video'>('image');
+  const [recordingDuration, setRecordingDuration] = useState(5);
+  const [isRecording, setIsRecording] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
+  
+  // Character catalog
+  const [savedCharacters, setSavedCharacters] = useState<CharacterLayer[]>(() => {
+    const saved = localStorage.getItem('gameCharacterCatalog');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [showCatalog, setShowCatalog] = useState(false);
+  
+  // Projects
+  interface Project {
+    id: string;
+    name: string;
+    layers: CharacterLayer[];
+    backgroundColor: string;
+    backgroundImage: string | null;
+    transparentBackground: boolean;
+    createdAt: string;
+  }
+  
+  const [savedProjects, setSavedProjects] = useState<Project[]>(() => {
+    const saved = localStorage.getItem('gameProjects');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [showProjects, setShowProjects] = useState(false);
 
   const createNewCharacter = useCallback((name: string) => {
     const newLayer: CharacterLayer = {
@@ -671,6 +700,189 @@ function GameAnimationsApp() {
     }));
   }, [isDragging, selectedLayerId, getMousePosition, dragStart]);
 
+  // Save character to catalog
+  const saveCharacterToCatalog = useCallback((layer: CharacterLayer) => {
+    const characterToSave = { ...layer, id: `saved-${Date.now()}` };
+    const newCatalog = [...savedCharacters, characterToSave];
+    setSavedCharacters(newCatalog);
+    localStorage.setItem('gameCharacterCatalog', JSON.stringify(newCatalog));
+    alert(`Character "${layer.name}" saved to catalog!`);
+  }, [savedCharacters]);
+  
+  // Load character from catalog
+  const loadCharacterFromCatalog = useCallback((savedChar: CharacterLayer) => {
+    const newLayer = { 
+      ...savedChar, 
+      id: `layer-${Date.now()}`,
+      x: 500,
+      y: 500
+    };
+    
+    setLayers(prev => [...prev, newLayer]);
+    setSelectedLayerId(newLayer.id);
+    
+    // Load sprite images
+    savedChar.sprites.forEach(sprite => {
+      const img = new Image();
+      img.src = sprite.src;
+      img.onload = () => {
+        setImages(prev => ({ ...prev, [sprite.id]: img }));
+      };
+    });
+    
+    // Initialize animation state
+    setAnimationStates(prev => ({
+      ...prev,
+      [newLayer.id]: {
+        currentFrameIndex: 0,
+        frameStartTime: 0,
+        currentX: newLayer.x,
+        currentY: newLayer.y,
+        baseY: newLayer.y,
+        direction: 1,
+        flipped: newLayer.spriteFacingDirection === 'left',
+        rotation: 0,
+        bounceTimer: 0,
+        blinkTimer: 0,
+        isJumping: false,
+        sequenceIndex: 0
+      }
+    }));
+    
+    setShowCatalog(false);
+  }, []);
+  
+  // Save project
+  const saveProject = useCallback(() => {
+    const projectName = prompt('Enter project name:');
+    if (!projectName) return;
+    
+    const project: Project = {
+      id: `project-${Date.now()}`,
+      name: projectName,
+      layers: JSON.parse(JSON.stringify(layers)),
+      backgroundColor,
+      backgroundImage,
+      transparentBackground,
+      createdAt: new Date().toISOString()
+    };
+    
+    const newProjects = [...savedProjects, project];
+    setSavedProjects(newProjects);
+    localStorage.setItem('gameProjects', JSON.stringify(newProjects));
+    alert(`Project "${projectName}" saved!`);
+  }, [layers, backgroundColor, backgroundImage, transparentBackground, savedProjects]);
+  
+  // Load project
+  const loadProject = useCallback((project: Project) => {
+    // Clear current state
+    setLayers([]);
+    setImages({});
+    setAnimationStates({});
+    
+    // Load project settings
+    setBackgroundColor(project.backgroundColor);
+    setTransparentBackground(project.transparentBackground);
+    
+    if (project.backgroundImage) {
+      setBackgroundImage(project.backgroundImage);
+      const img = new Image();
+      img.src = project.backgroundImage;
+      img.onload = () => {
+        setBackgroundImageObj(img);
+      };
+    } else {
+      setBackgroundImage(null);
+      setBackgroundImageObj(null);
+    }
+    
+    // Load layers
+    project.layers.forEach(layer => {
+      // Load sprite images
+      layer.sprites.forEach(sprite => {
+        const img = new Image();
+        img.src = sprite.src;
+        img.onload = () => {
+          setImages(prev => ({ ...prev, [sprite.id]: img }));
+        };
+      });
+      
+      // Initialize animation state
+      setAnimationStates(prev => ({
+        ...prev,
+        [layer.id]: {
+          currentFrameIndex: 0,
+          frameStartTime: 0,
+          currentX: layer.x,
+          currentY: layer.y,
+          baseY: layer.y,
+          direction: 1,
+          flipped: layer.spriteFacingDirection === 'left',
+          rotation: 0,
+          bounceTimer: 0,
+          blinkTimer: 0,
+          isJumping: false,
+          sequenceIndex: 0
+        }
+      }));
+    });
+    
+    setLayers(project.layers);
+    setShowProjects(false);
+    alert(`Project "${project.name}" loaded!`);
+  }, []);
+  
+  // Start video recording
+  const startRecording = useCallback(async () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    // Start playing if not already
+    if (!isPlaying) {
+      setIsPlaying(true);
+    }
+    
+    const stream = canvas.captureStream(30); // 30 FPS
+    const mediaRecorder = new MediaRecorder(stream, {
+      mimeType: 'video/webm;codecs=vp9',
+      videoBitsPerSecond: 5000000 // 5 Mbps
+    });
+    
+    recordedChunksRef.current = [];
+    
+    mediaRecorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        recordedChunksRef.current.push(event.data);
+      }
+    };
+    
+    mediaRecorder.onstop = () => {
+      const blob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `showcase-animation-${exportSize}x${exportSize}.webm`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      setIsRecording(false);
+      setShowExportModal(false);
+    };
+    
+    mediaRecorder.start();
+    mediaRecorderRef.current = mediaRecorder;
+    setIsRecording(true);
+    
+    // Auto-stop after duration
+    setTimeout(() => {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+        mediaRecorderRef.current.stop();
+      }
+    }, recordingDuration * 1000);
+  }, [isPlaying, exportSize, recordingDuration]);
+
   const handleMouseUp = useCallback(() => {
     setIsDragging(false);
   }, []);
@@ -774,6 +986,14 @@ function GameAnimationsApp() {
     
     setShowExportModal(false);
   }, [exportSize, layers, images, animationStates, isPlaying, transparentBackground, backgroundImageObj, backgroundColor]);
+  
+  const handleExport = useCallback(() => {
+    if (exportType === 'image') {
+      exportCanvas();
+    } else {
+      startRecording();
+    }
+  }, [exportType, exportCanvas, startRecording]);
 
   return (
     <div className="h-screen bg-gray-900 text-white overflow-hidden">
@@ -886,6 +1106,118 @@ function GameAnimationsApp() {
               <span className="text-sm">Show Grid</span>
             </label>
           </div>
+          
+          <div className="border-t border-gray-700 pt-4">
+            <h3 className="font-bold mb-2">Projects</h3>
+            <button
+              onClick={saveProject}
+              className="w-full bg-green-600 text-white px-3 py-2 rounded hover:bg-green-700 mb-2"
+            >
+              💾 Save Current Project
+            </button>
+            <button
+              onClick={() => setShowProjects(!showProjects)}
+              className="w-full bg-purple-600 text-white px-3 py-2 rounded hover:bg-purple-700"
+            >
+              {showProjects ? 'Hide' : 'Browse'} Projects ({savedProjects.length})
+            </button>
+            
+            {showProjects && (
+              <div className="mt-3 space-y-2 max-h-60 overflow-y-auto">
+                {savedProjects.length === 0 ? (
+                  <div className="text-gray-400 text-sm text-center py-4">
+                    No saved projects yet
+                  </div>
+                ) : (
+                  savedProjects.map(project => (
+                    <div 
+                      key={project.id}
+                      className="bg-gray-700 p-2 rounded"
+                    >
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <div className="font-medium text-sm">{project.name}</div>
+                          <div className="text-xs text-gray-400">
+                            {project.layers.length} layers | {new Date(project.createdAt).toLocaleDateString()}
+                          </div>
+                        </div>
+                        <div className="flex gap-1">
+                          <button
+                            onClick={() => loadProject(project)}
+                            className="bg-blue-600 text-white px-2 py-1 rounded text-xs hover:bg-blue-700"
+                          >
+                            Load
+                          </button>
+                          <button
+                            onClick={() => {
+                              const newProjects = savedProjects.filter(p => p.id !== project.id);
+                              setSavedProjects(newProjects);
+                              localStorage.setItem('gameProjects', JSON.stringify(newProjects));
+                            }}
+                            className="bg-red-600 text-white px-2 py-1 rounded text-xs hover:bg-red-700"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+          
+          <div className="border-t border-gray-700 pt-4">
+            <h3 className="font-bold mb-2">Character Catalog</h3>
+            <button
+              onClick={() => setShowCatalog(!showCatalog)}
+              className="w-full bg-indigo-600 text-white px-3 py-2 rounded hover:bg-indigo-700"
+            >
+              {showCatalog ? 'Hide' : 'Browse'} Catalog ({savedCharacters.length})
+            </button>
+            
+            {showCatalog && (
+              <div className="mt-3 space-y-2 max-h-60 overflow-y-auto">
+                {savedCharacters.length === 0 ? (
+                  <div className="text-gray-400 text-sm text-center py-4">
+                    No saved characters yet
+                  </div>
+                ) : (
+                  savedCharacters.map(char => (
+                    <div 
+                      key={char.id}
+                      className="bg-gray-700 p-2 rounded flex justify-between items-center"
+                    >
+                      <div>
+                        <div className="font-medium text-sm">{char.name}</div>
+                        <div className="text-xs text-gray-400">
+                          {char.sprites.length} sprites
+                        </div>
+                      </div>
+                      <div className="flex gap-1">
+                        <button
+                          onClick={() => loadCharacterFromCatalog(char)}
+                          className="bg-green-600 text-white px-2 py-1 rounded text-xs hover:bg-green-700"
+                        >
+                          Load
+                        </button>
+                        <button
+                          onClick={() => {
+                            const newCatalog = savedCharacters.filter(c => c.id !== char.id);
+                            setSavedCharacters(newCatalog);
+                            localStorage.setItem('gameCharacterCatalog', JSON.stringify(newCatalog));
+                          }}
+                          className="bg-red-600 text-white px-2 py-1 rounded text-xs hover:bg-red-700"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
         </div>
         
         {/* Center - Canvas */}
@@ -930,8 +1262,32 @@ function GameAnimationsApp() {
             {/* Export Modal */}
             {showExportModal && (
               <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-50">
-                <div className="bg-gray-800 p-6 rounded-lg">
+                <div className="bg-gray-800 p-6 rounded-lg max-w-md">
                   <h3 className="text-xl font-bold mb-4">Export Settings</h3>
+                  
+                  <div className="mb-4">
+                    <label className="block mb-2">
+                      <span className="text-sm">Export Type</span>
+                    </label>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setExportType('image')}
+                        className={`flex-1 px-3 py-2 rounded ${
+                          exportType === 'image' ? 'bg-blue-600' : 'bg-gray-700 hover:bg-gray-600'
+                        }`}
+                      >
+                        📷 Image (Current Frame)
+                      </button>
+                      <button
+                        onClick={() => setExportType('video')}
+                        className={`flex-1 px-3 py-2 rounded ${
+                          exportType === 'video' ? 'bg-blue-600' : 'bg-gray-700 hover:bg-gray-600'
+                        }`}
+                      >
+                        🎬 Video (Animation)
+                      </button>
+                    </div>
+                  </div>
                   
                   <div className="mb-4">
                     <label className="block mb-2">
@@ -952,15 +1308,42 @@ function GameAnimationsApp() {
                     </select>
                   </div>
                   
+                  {exportType === 'video' && (
+                    <div className="mb-4">
+                      <label className="block mb-2">
+                        <span className="text-sm">Recording Duration (seconds)</span>
+                      </label>
+                      <input
+                        type="range"
+                        min="1"
+                        max="30"
+                        value={recordingDuration}
+                        onChange={(e) => setRecordingDuration(parseInt(e.target.value))}
+                        className="w-full"
+                      />
+                      <span className="text-xs text-gray-400">{recordingDuration} seconds</span>
+                    </div>
+                  )}
+                  
                   <div className="flex gap-2">
                     <button
-                      onClick={exportCanvas}
-                      className="flex-1 bg-green-600 hover:bg-green-700 px-4 py-2 rounded"
+                      onClick={handleExport}
+                      disabled={isRecording}
+                      className={`flex-1 px-4 py-2 rounded ${
+                        isRecording 
+                          ? 'bg-red-600 cursor-not-allowed' 
+                          : 'bg-green-600 hover:bg-green-700'
+                      }`}
                     >
-                      Export
+                      {isRecording ? '⏺ Recording...' : 'Export'}
                     </button>
                     <button
-                      onClick={() => setShowExportModal(false)}
+                      onClick={() => {
+                        if (isRecording && mediaRecorderRef.current) {
+                          mediaRecorderRef.current.stop();
+                        }
+                        setShowExportModal(false);
+                      }}
                       className="flex-1 bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded"
                     >
                       Cancel
@@ -1016,6 +1399,16 @@ function GameAnimationsApp() {
                   </button>
                 </div>
               )}
+            </div>
+            
+            {/* Character Actions */}
+            <div className="mb-4">
+              <button
+                onClick={() => saveCharacterToCatalog(selectedLayer)}
+                className="w-full bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700"
+              >
+                💾 Save to Catalog
+              </button>
             </div>
             
             {/* Movement Controls */}

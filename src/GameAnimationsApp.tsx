@@ -162,6 +162,7 @@ function GameAnimationsApp() {
   const lastTimeRef = useRef<number>(0);
   
   const [draggedFrameId, setDraggedFrameId] = useState<string | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
   
   // Interaction states for positioning
@@ -358,29 +359,45 @@ function GameAnimationsApp() {
       const newStates = { ...prev };
       
       layers.forEach(layer => {
-        if (!layer.visible || !layer.gameAnimation) return;
+        if (!layer.visible) return;
         
         const state = newStates[layer.id];
         if (!state) return;
         
         const preset = layer.gameAnimation;
         
-        // Handle prescribed sprite sequence
-        if (preset.spriteSequence.frameOrder.length > 0) {
-          const currentDuration = preset.spriteSequence.frameDurations[state.sequenceIndex] || 100;
+        // Handle sprite sequence based on preset or custom
+        if (layer.gameAnimation) {
+          // Use preset sequence
+          if (preset.spriteSequence.frameOrder.length > 0) {
+            const currentDuration = preset.spriteSequence.frameDurations[state.sequenceIndex] || 100;
+            
+            if (currentTime - state.frameStartTime >= currentDuration) {
+              // Move to next in prescribed sequence
+              state.sequenceIndex = (state.sequenceIndex + 1) % preset.spriteSequence.frameOrder.length;
+              state.currentFrameIndex = preset.spriteSequence.frameOrder[state.sequenceIndex];
+              state.frameStartTime = currentTime;
+            }
+          }
+        } else if (layer.sequence.frames.length > 0) {
+          // Use custom sequence
+          const currentFrameId = layer.sequence.frames[state.currentFrameIndex % layer.sequence.frames.length];
+          const currentFrame = layer.sprites.find(s => s.id === currentFrameId);
           
-          if (currentTime - state.frameStartTime >= currentDuration) {
-            // Move to next in prescribed sequence
-            state.sequenceIndex = (state.sequenceIndex + 1) % preset.spriteSequence.frameOrder.length;
-            state.currentFrameIndex = preset.spriteSequence.frameOrder[state.sequenceIndex];
+          if (currentFrame && currentTime - state.frameStartTime >= currentFrame.duration) {
+            let nextIndex = state.currentFrameIndex + 1;
+            if (nextIndex >= layer.sequence.frames.length) {
+              nextIndex = layer.sequence.loop ? 0 : layer.sequence.frames.length - 1;
+            }
+            state.currentFrameIndex = nextIndex;
             state.frameStartTime = currentTime;
           }
         }
         
-        // Handle movement based on preset
+        // Handle movement based on preset or custom settings
         const patrolSpeed = 60 * deltaTime / 1000;
         
-        // Horizontal patrol
+        // Horizontal patrol (works with or without preset)
         if (layer.customPatrolWidth > 0) {
           state.currentX += patrolSpeed * state.direction;
           
@@ -399,7 +416,7 @@ function GameAnimationsApp() {
         }
         
         // Handle bouncing/jumping for Rex-style animation
-        if (preset.movement.bounceInterval > 0) {
+        if (preset && preset.movement.bounceInterval > 0) {
           state.bounceTimer += deltaTime;
           
           if (state.bounceTimer >= preset.movement.bounceInterval && !state.isJumping) {
@@ -436,12 +453,12 @@ function GameAnimationsApp() {
         }
         
         // Continuous rotation (Beetle-style)
-        if (preset.enemyType === 'beetle' && preset.movement.rotationSpeed > 0) {
+        if (preset && preset.enemyType === 'beetle' && preset.movement.rotationSpeed > 0) {
           state.rotation += preset.movement.rotationSpeed * deltaTime * state.direction;
         }
         
         // Handle blinking pattern (if specified)
-        if (preset.movement.blinkPattern) {
+        if (preset && preset.movement.blinkPattern) {
           state.blinkTimer += deltaTime;
           
           const { interval, duration, frameIndex } = preset.movement.blinkPattern;
@@ -576,15 +593,16 @@ function GameAnimationsApp() {
       
       let frameId: string | undefined;
       
-      if (layer.gameAnimation && layer.sequence.frames.length > 0) {
-        // Use prescribed sequence
+      if (layer.gameAnimation && layer.sprites.length > 0) {
+        // Use prescribed sequence from game preset
         const frameIndex = state.currentFrameIndex;
         if (layer.sprites[frameIndex]) {
           frameId = layer.sprites[frameIndex].id;
         }
       } else if (layer.sequence.frames.length > 0) {
-        // Use regular sequence
-        frameId = layer.sequence.frames[state.currentFrameIndex % layer.sequence.frames.length];
+        // Use custom sequence
+        const frameIndex = state.currentFrameIndex % layer.sequence.frames.length;
+        frameId = layer.sequence.frames[frameIndex];
       } else if (layer.sprites.length > 0) {
         // Fallback to first sprite
         frameId = layer.sprites[0].id;
@@ -1548,33 +1566,177 @@ function GameAnimationsApp() {
                   <div className="text-gray-400">
                     Drop sprites here or click to upload
                     <br />
-                    <span className="text-xs">(Upload in order for game animations)</span>
+                    <span className="text-xs">(Max 10 at a time)</span>
                   </div>
                 </label>
               </div>
               
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-3 gap-2 mb-4">
                 {selectedLayer.sprites.map((sprite, index) => (
                   <div
                     key={sprite.id}
-                    className="relative group"
+                    onClick={() => {
+                      // Add to sequence on click
+                      setLayers(prev => prev.map(l => 
+                        l.id === selectedLayerId 
+                          ? { 
+                              ...l, 
+                              sequence: { 
+                                ...l.sequence, 
+                                frames: [...l.sequence.frames, sprite.id] 
+                              }
+                            }
+                          : l
+                      ));
+                    }}
+                    className="relative group cursor-pointer"
                   >
                     <img
                       src={sprite.src}
                       alt={sprite.name}
-                      className="w-full h-20 object-cover rounded border border-gray-600"
+                      className="w-full h-20 object-cover rounded border border-gray-600 hover:border-blue-500"
                     />
-                    <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-xs p-1">
-                      #{index + 1}
+                    <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-xs p-1 truncate">
+                      {sprite.name}
                     </div>
                   </div>
                 ))}
               </div>
+            </div>
+            
+            {/* Animation Sequence */}
+            <div className="mb-6">
+              <h3 className="font-bold mb-2">Animation Sequence</h3>
+              
+              {/* Sequence Controls */}
+              <div className="flex gap-2 mb-3">
+                <button
+                  onClick={() => {
+                    setLayers(prev => prev.map(l => 
+                      l.id === selectedLayerId 
+                        ? { ...l, sequence: { ...l.sequence, frames: [] } }
+                        : l
+                    ));
+                  }}
+                  className="bg-red-600 hover:bg-red-700 px-3 py-1 rounded text-sm"
+                >
+                  Clear All
+                </button>
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={selectedLayer.sequence.loop}
+                    onChange={(e) => {
+                      setLayers(prev => prev.map(l => 
+                        l.id === selectedLayerId 
+                          ? { ...l, sequence: { ...l.sequence, loop: e.target.checked } }
+                          : l
+                      ));
+                    }}
+                    className="mr-2"
+                  />
+                  <span className="text-sm">Loop</span>
+                </label>
+              </div>
+              
+              <div className="space-y-2">
+                {selectedLayer.sequence.frames.map((frameId, index) => {
+                  const frame = selectedLayer.sprites.find(s => s.id === frameId);
+                  if (!frame) return null;
+                  
+                  return (
+                    <div
+                      key={`${frameId}-${index}`}
+                      draggable
+                      onDragStart={() => setDraggedFrameId(frameId)}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        setDragOverIndex(index);
+                      }}
+                      onDragLeave={() => setDragOverIndex(null)}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        if (draggedFrameId) {
+                          const fromIndex = selectedLayer.sequence.frames.indexOf(draggedFrameId);
+                          if (fromIndex !== -1) {
+                            const newFrames = [...selectedLayer.sequence.frames];
+                            const [removed] = newFrames.splice(fromIndex, 1);
+                            newFrames.splice(index, 0, removed);
+                            
+                            setLayers(prev => prev.map(l => 
+                              l.id === selectedLayerId 
+                                ? { ...l, sequence: { ...l.sequence, frames: newFrames } }
+                                : l
+                            ));
+                          }
+                        }
+                        setDraggedFrameId(null);
+                        setDragOverIndex(null);
+                      }}
+                      className={`flex items-center bg-gray-700 rounded p-2 ${
+                        dragOverIndex === index ? 'border-2 border-blue-500' : ''
+                      }`}
+                    >
+                      <span className="text-gray-400 mr-3">#{index + 1}</span>
+                      <img
+                        src={frame.src}
+                        alt={frame.name}
+                        className="w-12 h-12 object-cover rounded mr-3"
+                      />
+                      <div className="flex-1">
+                        <div className="text-sm truncate">{frame.name}</div>
+                        <div className="flex items-center gap-2 mt-1">
+                          <input
+                            type="number"
+                            value={frame.duration}
+                            onChange={(e) => {
+                              const duration = parseInt(e.target.value) || 100;
+                              setLayers(prev => prev.map(l => 
+                                l.id === selectedLayerId 
+                                  ? {
+                                      ...l,
+                                      sprites: l.sprites.map(s => 
+                                        s.id === frameId ? { ...s, duration } : s
+                                      )
+                                    }
+                                  : l
+                              ));
+                            }}
+                            className="w-20 bg-gray-600 text-white px-2 py-1 rounded text-xs"
+                            min="10"
+                            step="10"
+                          />
+                          <span className="text-xs text-gray-400">ms</span>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => {
+                          const newFrames = selectedLayer.sequence.frames.filter((_, i) => i !== index);
+                          setLayers(prev => prev.map(l => 
+                            l.id === selectedLayerId 
+                              ? { ...l, sequence: { ...l.sequence, frames: newFrames } }
+                              : l
+                          ));
+                        }}
+                        className="ml-2 text-red-500 hover:text-red-400 text-xl"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+              
+              {selectedLayer.sequence.frames.length === 0 && (
+                <div className="text-gray-400 text-sm text-center py-4 bg-gray-700 rounded">
+                  Click sprites above to add them to the sequence
+                </div>
+              )}
               
               {selectedLayer.gameAnimation && (
-                <div className="mt-3 p-2 bg-gray-700 rounded">
-                  <div className="text-xs text-gray-400">
-                    Sequence Order: {selectedLayer.gameAnimation.spriteSequence.frameOrder.map(i => `#${i+1}`).join(' → ')}
+                <div className="mt-3 p-2 bg-blue-900/50 rounded border border-blue-700">
+                  <div className="text-xs text-blue-300">
+                    Game Preset Active: {selectedLayer.gameAnimation.name}
                   </div>
                 </div>
               )}

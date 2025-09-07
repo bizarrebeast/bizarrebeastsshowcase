@@ -235,10 +235,15 @@ AnimationStudio/
 ## Implementation Priority
 
 ### MVP (Minimum Viable Product) - Week 1-2
-1. ✅ Basic action blocks (Jump, Flip, Bounce)
-2. ✅ Simple sequence builder
-3. ✅ Parameter adjustment
-4. ✅ Preview functionality
+1. ✅ Basic action blocks (12 blocks: Jump, Fall, Land, Idle, Flip, Spin, Bounce, Float, Roll, Attack, Dodge, Hit)
+2. ✅ Drag-and-drop sequence builder with reordering
+3. ✅ Inline parameter adjustment (duration, height, distance, rotation, easing)
+4. ✅ Real-time preview with animation engine
+5. ✅ Smart Templates (Rex Full Jump, Cat Stalker, Beetle Attack, Boss Entry)
+6. ✅ Sprite upload and management system
+7. ✅ Collapsible panels for workspace management
+8. ✅ Visual timeline with playhead
+9. ✅ 6 easing functions (linear, easeIn, easeOut, easeInOut, bounce, elastic)
 
 ### Enhanced Version - Week 3-4
 1. Timeline editor

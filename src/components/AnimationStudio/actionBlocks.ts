@@ -1,4 +1,4 @@
-import { ActionBlockDefinition } from './types';
+import type { ActionBlockDefinition } from './types';
 
 export const ACTION_BLOCKS: ActionBlockDefinition[] = [
   // Movement blocks

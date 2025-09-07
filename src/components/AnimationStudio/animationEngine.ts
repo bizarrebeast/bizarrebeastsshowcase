@@ -1,4 +1,4 @@
-import { ActionBlockInstance, EasingType } from './types';
+import type { ActionBlockInstance, EasingType } from './types';
 
 interface AnimationFrame {
   x: number;

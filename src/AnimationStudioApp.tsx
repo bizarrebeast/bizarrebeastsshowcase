@@ -3,14 +3,18 @@ import ActionLibrary from './components/AnimationStudio/ActionLibrary';
 import SequenceEditor from './components/AnimationStudio/SequenceEditor';
 import PreviewCanvas from './components/AnimationStudio/PreviewCanvas';
 import { ACTION_BLOCKS, SMART_TEMPLATES } from './components/AnimationStudio/actionBlocks';
-import { 
+import type { 
   ActionBlockDefinition, 
   ActionBlockInstance, 
   AnimationState 
 } from './components/AnimationStudio/types';
 import './index.css';
 
-function AnimationStudioApp() {
+interface AnimationStudioAppProps {
+  onBack?: () => void;
+}
+
+function AnimationStudioApp({ onBack }: AnimationStudioAppProps) {
   const [sequenceBlocks, setSequenceBlocks] = useState<ActionBlockInstance[]>([]);
   const [animationState, setAnimationState] = useState<AnimationState>({
     currentBlockIndex: 0,
@@ -25,9 +29,46 @@ function AnimationStudioApp() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [draggedAction, setDraggedAction] = useState<ActionBlockDefinition | null>(null);
+  const [sprites, setSprites] = useState<Array<{ id: string; name: string; src: string }>>([]);
+  const [collapsedPanels, setCollapsedPanels] = useState<Set<string>>(new Set());
   
   const animationFrameRef = useRef<number>();
   const lastTimeRef = useRef<number>(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const togglePanel = (panelName: string) => {
+    setCollapsedPanels(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(panelName)) {
+        newSet.delete(panelName);
+      } else {
+        newSet.add(panelName);
+      }
+      return newSet;
+    });
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+
+    Array.from(files).forEach(file => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const result = event.target?.result;
+        if (typeof result === 'string') {
+          setSprites(prev => [...prev, {
+            id: `sprite-${Date.now()}-${Math.random()}`,
+            name: file.name,
+            src: result
+          }]);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+    
+    if (e.target) e.target.value = '';
+  };
 
   // Animation loop
   useEffect(() => {
@@ -193,7 +234,13 @@ function AnimationStudioApp() {
         {/* Header */}
         <div className="bg-gray-800 px-6 py-4 border-b border-gray-700">
           <div className="flex items-center justify-between">
-            <div>
+            <button
+              onClick={onBack}
+              className="bg-gray-700 text-white px-4 py-2 rounded hover:bg-gray-600"
+            >
+              ← Back
+            </button>
+            <div className="text-center flex-1">
               <h1 className="text-2xl font-bold">Animation Studio</h1>
               <p className="text-gray-400 text-sm">Build complex animations with action blocks</p>
             </div>
@@ -223,30 +270,76 @@ function AnimationStudioApp() {
 
         {/* Main Content */}
         <div className="flex-1 flex overflow-hidden">
-          {/* Left Panel - Action Library */}
-          <div className="w-80 p-4 overflow-y-auto border-r border-gray-700">
-            <ActionLibrary
-              actions={ACTION_BLOCKS}
-              onDragStart={handleDragStart}
-              onAddAction={handleAddAction}
-            />
+          {/* Left Panel - Action Library & Sprites */}
+          <div className={`${collapsedPanels.has('left') ? 'w-12' : 'w-80'} transition-all duration-300 p-4 overflow-y-auto border-r border-gray-700`}>
+            <button
+              onClick={() => togglePanel('left')}
+              className="mb-4 text-gray-400 hover:text-white"
+            >
+              {collapsedPanels.has('left') ? '→' : '←'} {!collapsedPanels.has('left') && 'Collapse'}
+            </button>
             
-            {/* Smart Templates */}
-            <div className="mt-6 bg-gray-800 p-4 rounded-lg">
-              <h3 className="text-white font-bold mb-4">Smart Templates</h3>
-              <div className="space-y-2">
-                {SMART_TEMPLATES.map(template => (
+            {!collapsedPanels.has('left') && (
+              <>
+                {/* Sprite Upload Section */}
+                <div className="bg-gray-800 p-4 rounded-lg mb-4">
+                  <h3 className="text-white font-bold mb-4">Sprite Library</h3>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    accept="image/*"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                  />
                   <button
-                    key={template.id}
-                    onClick={() => handleLoadTemplate(template.id)}
-                    className="w-full text-left bg-gray-700 p-3 rounded hover:bg-gray-600 transition-colors"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-full bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 mb-4"
                   >
-                    <div className="text-white font-medium">{template.name}</div>
-                    <div className="text-gray-400 text-xs">{template.description}</div>
+                    + Upload Sprites
                   </button>
-                ))}
-              </div>
-            </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {sprites.map(sprite => (
+                      <div key={sprite.id} className="relative group">
+                        <img
+                          src={sprite.src}
+                          alt={sprite.name}
+                          className="w-full h-20 object-contain bg-gray-700 rounded"
+                        />
+                        <button
+                          onClick={() => setSprites(prev => prev.filter(s => s.id !== sprite.id))}
+                          className="absolute top-0 right-0 bg-red-600 text-white text-xs px-1 rounded opacity-0 group-hover:opacity-100"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <ActionLibrary
+                  actions={ACTION_BLOCKS}
+                  onDragStart={handleDragStart}
+                  onAddAction={handleAddAction}
+                />
+                
+                {/* Smart Templates */}
+                <div className="mt-6 bg-gray-800 p-4 rounded-lg">
+                  <h3 className="text-white font-bold mb-4">Smart Templates</h3>
+                  <div className="space-y-2">
+                    {SMART_TEMPLATES.map(template => (
+                      <button
+                        key={template.id}
+                        onClick={() => handleLoadTemplate(template.id)}
+                        className="w-full text-left bg-gray-700 p-3 rounded hover:bg-gray-600 transition-colors"
+                      >
+                        <div className="text-white font-medium">{template.name}</div>
+                        <div className="text-gray-400 text-xs">{template.description}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
           </div>
 
           {/* Center - Preview */}
@@ -256,6 +349,7 @@ function AnimationStudioApp() {
               animationState={animationState}
               isPlaying={isPlaying}
               currentTime={currentTime}
+              sprites={sprites}
             />
             
             {/* Timeline Progress */}
@@ -302,15 +396,24 @@ function AnimationStudioApp() {
           </div>
 
           {/* Right Panel - Sequence Editor */}
-          <div className="w-96 p-4 overflow-y-auto border-l border-gray-700">
-            <SequenceEditor
-              blocks={sequenceBlocks}
-              onUpdateBlock={handleUpdateBlock}
-              onRemoveBlock={handleRemoveBlock}
-              onReorderBlocks={handleReorderBlocks}
-              onDrop={handleDrop}
-              onDragOver={handleDragOver}
-            />
+          <div className={`${collapsedPanels.has('right') ? 'w-12' : 'w-96'} transition-all duration-300 p-4 overflow-y-auto border-l border-gray-700`}>
+            <button
+              onClick={() => togglePanel('right')}
+              className="mb-4 text-gray-400 hover:text-white float-right"
+            >
+              {collapsedPanels.has('right') ? '←' : '→'} {!collapsedPanels.has('right') && 'Collapse'}
+            </button>
+            
+            {!collapsedPanels.has('right') && (
+              <SequenceEditor
+                blocks={sequenceBlocks}
+                onUpdateBlock={handleUpdateBlock}
+                onRemoveBlock={handleRemoveBlock}
+                onReorderBlocks={handleReorderBlocks}
+                onDrop={handleDrop}
+                onDragOver={handleDragOver}
+              />
+            )}
           </div>
         </div>
       </div>

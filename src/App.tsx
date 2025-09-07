@@ -38,17 +38,7 @@ function App() {
   }
 
   if (currentMode === 'animationStudio') {
-    return (
-      <div className="relative">
-        <button
-          onClick={() => setCurrentMode('menu')}
-          className="absolute top-4 left-4 z-50 bg-gray-800 text-white px-4 py-2 rounded hover:bg-gray-700"
-        >
-          ← Back to Menu
-        </button>
-        <AnimationStudioApp />
-      </div>
-    );
+    return <AnimationStudioApp onBack={() => setCurrentMode('menu')} />;
   }
 
   return (

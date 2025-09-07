@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ActionBlockInstance, EasingType } from './types';
+import type { ActionBlockInstance, EasingType } from './types';
 
 interface SequenceEditorProps {
   blocks: ActionBlockInstance[];

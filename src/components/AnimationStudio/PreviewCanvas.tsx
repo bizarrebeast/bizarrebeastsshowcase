@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import { ActionBlockInstance, AnimationState } from './types';
+import type { ActionBlockInstance, AnimationState } from './types';
 import { calculateAnimation } from './animationEngine';
 
 interface PreviewCanvasProps {
@@ -9,6 +9,7 @@ interface PreviewCanvasProps {
   currentTime: number;
   width?: number;
   height?: number;
+  sprites?: Array<{ id: string; name: string; src: string }>;
 }
 
 const PreviewCanvas: React.FC<PreviewCanvasProps> = ({
@@ -17,7 +18,8 @@ const PreviewCanvas: React.FC<PreviewCanvasProps> = ({
   isPlaying,
   currentTime,
   width = 800,
-  height = 600
+  height = 600,
+  sprites = []
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 

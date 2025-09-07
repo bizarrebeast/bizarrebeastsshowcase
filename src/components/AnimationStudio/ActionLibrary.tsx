@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActionBlockDefinition } from './types';
+import type { ActionBlockDefinition } from './types';
 
 interface ActionLibraryProps {
   actions: ActionBlockDefinition[];
